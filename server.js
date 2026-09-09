@@ -19,7 +19,11 @@ app.post("/chat", async (req, res) => {
     const userMessage = req.body.message;
 
     if (!userMessage || typeof userMessage !== "string") {
-      return res.status(400).json({ error: "No message provided." });
+      return res.status(400).json({
+        error: true,
+        code: "BAD_REQUEST",
+        message: "No message provided.",
+      });
     }
 
     const response = await fetch(
@@ -41,7 +45,24 @@ app.post("/chat", async (req, res) => {
 
     if (!response.ok) {
       console.error("Gemini error:", data);
-      return res.status(500).json({ error: "The AI service returned an error." });
+
+      const apiError = data && data.error;
+      const isRateLimited =
+        response.status === 429 || apiError?.status === "RESOURCE_EXHAUSTED";
+
+      if (isRateLimited) {
+        return res.status(429).json({
+          error: true,
+          code: "RATE_LIMIT",
+          message: "You're sending messages too fast — wait a moment and try again.",
+        });
+      }
+
+      return res.status(response.status || 500).json({
+        error: true,
+        code: "API_ERROR",
+        message: apiError?.message || "The AI service returned an error.",
+      });
     }
 
     const reply =
@@ -51,7 +72,11 @@ app.post("/chat", async (req, res) => {
     res.json({ reply });
   } catch (err) {
     console.error("Server error:", err);
-    res.status(500).json({ error: "Something went wrong on the server." });
+    res.status(500).json({
+      error: true,
+      code: "SERVER_ERROR",
+      message: "Something went wrong on the server.",
+    });
   }
 });
 
